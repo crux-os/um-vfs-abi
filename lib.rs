@@ -86,6 +86,19 @@ pub const OP_TRUNCATE:  u32 = 0x18;
 ///            payload[1]=blocks_reclaimed
 pub const OP_GC:        u32 = 0x19;
 
+/// SHM_ECHO -- proof-of-concept for the SYS_SHM_CREATE/SYS_SHM_MAP
+/// zero-copy shared-memory primitive: the caller creates a shared
+/// region, writes bytes into it, and sends um-vfs the region id +
+/// byte count -- NOT the bytes themselves, unlike every other op
+/// here (which embed up to INLINE_BYTES per message). um-vfs maps
+/// the SAME physical pages and reads directly from them.
+///   request: payload[0]=shm_id, payload[1]=len
+///   reply:   payload[0]=status, payload[1]=bytes echoed back
+///            (um-vfs writes its own reply text into the FIRST few
+///            bytes of the same shared region, overwriting the
+///            request -- the caller re-reads through its own mapping)
+pub const OP_SHM_ECHO:  u32 = 0x1a;
+
 // ── kinds ───────────────────────────────────────────────────────────────
 pub const KIND_NONE:    u64 = 0;     // also used as "absent / EOF"
 pub const KIND_FILE:    u64 = 1;
