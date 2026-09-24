@@ -99,6 +99,30 @@ pub const OP_GC:        u32 = 0x19;
 ///            request -- the caller re-reads through its own mapping)
 pub const OP_SHM_ECHO:  u32 = 0x1a;
 
+/// READ_SHM -- bulk read into a shared-memory region (see SYS_SHM_*).
+/// um-vfs maps the caller's region once (cached per region id) and reads
+/// file data straight into it: no per-32-byte IPC round trips.
+///   request: payload[0]=handle, payload[1]=file_offset,
+///            payload[2]=shm_id, payload[3]=shm_offset, payload[4]=len
+///   reply:   payload[0]=status, payload[1]=bytes_read (0 = EOF; fewer
+///            than `len` only at EOF)
+/// Contract: the region must be at least BULK_REGION_BYTES long,
+/// shm_offset+len <= BULK_REGION_BYTES and len <= BULK_MAX_BYTES; um-vfs
+/// rejects (E_INVAL) anything outside that. It cannot verify the region's
+/// real size, so clients must create it with `BULK_REGION_BYTES` or more.
+pub const OP_READ_SHM:  u32 = 0x1b;
+
+/// WRITE_SHM -- bulk write from a shared-memory region. Same layout and
+/// contract as OP_READ_SHM; reply payload[1] = bytes_written. Writes to a
+/// CruxFS handle must stay sequential, exactly like OP_WRITE.
+pub const OP_WRITE_SHM: u32 = 0x1c;
+
+/// Minimum size a client must give the region it passes to *_SHM ops.
+pub const BULK_REGION_BYTES: usize = 256 * 1024;
+/// Largest single *_SHM transfer (half the region, so a client can
+/// double-buffer if it wants to).
+pub const BULK_MAX_BYTES: usize = 128 * 1024;
+
 // ── kinds ───────────────────────────────────────────────────────────────
 pub const KIND_NONE:    u64 = 0;     // also used as "absent / EOF"
 pub const KIND_FILE:    u64 = 1;
