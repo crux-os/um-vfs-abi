@@ -189,6 +189,19 @@ pub const SCRUB: u32 = 0x232;
 /// objects moved to /lost+found]; a message at window, NUL-terminated.
 pub const FSCK: u32 = 0x233;
 
+/// SUBVOLUME_CREATE(dir, path_len): a new, empty subvolume at the path (a
+/// directory that is a tree of its own: snapshots can be taken of it).
+/// reply: [status]
+pub const SUBVOLUME_CREATE: u32 = 0x234;
+/// SNAPSHOT_AT(src dir, src_len, dst dir, dst_len, flags=SNAPSHOT_READONLY?):
+/// snapshot of the subvolume (or volume root, or snapshot) at the source
+/// path, created at the destination path (layout as RENAME); writable
+/// unless SNAPSHOT_READONLY. reply: [status]
+pub const SNAPSHOT_AT: u32 = 0x235;
+/// SUBVOLUME_DELETE(dir, path_len): delete the subvolume or snapshot at
+/// the path with everything in it. reply: [status]
+pub const SUBVOLUME_DELETE: u32 = 0x236;
+
 // ── flags ───────────────────────────────────────────────────────────
 pub const O_READ: u64 = 1 << 0;
 pub const O_WRITE: u64 = 1 << 1;
@@ -218,6 +231,7 @@ pub const XATTR_SIZE_MAX: usize = 65536;
 
 pub const SNAPSHOT_CREATE: u64 = 1;
 pub const SNAPSHOT_DELETE: u64 = 2;
+pub const SNAPSHOT_READONLY: u64 = 1 << 0;
 /// Name of the snapshot directory at a volume's root.
 pub const SNAPSHOT_DIR: &[u8] = b".snapshots";
 
@@ -284,6 +298,7 @@ pub const FEATURE_XATTR: u64 = 1 << 7;
 pub const FEATURE_SNAPSHOTS: u64 = 1 << 8;
 pub const FEATURE_QUOTA: u64 = 1 << 9;
 pub const FEATURE_SCRUB: u64 = 1 << 10;
+pub const FEATURE_SUBVOLUMES: u64 = 1 << 11;
 
 /// One directory entry in a READDIR batch: this header, then `name_len`
 /// bytes of name, padded so the next record is 8-aligned (`rec_len`).
