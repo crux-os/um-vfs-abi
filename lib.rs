@@ -283,6 +283,20 @@ pub mod v2 {
     /// server; shares extents (reflink) where the filesystem can.
     /// reply: [status, bytes copied]
     pub const COPY_RANGE: u32 = 0x213;
+    /// XATTR_GET(dir, path_len, name_len, flags=AT_NOFOLLOW?): path, then
+    /// name. reply: [status, n]; value at window[0..n].
+    pub const XATTR_GET: u32 = 0x214;
+    /// XATTR_SET(dir, path_len, name_len, value_len, flags): path, name,
+    /// value. flags: XATTR_CREATE / XATTR_REPLACE. reply: [status]
+    pub const XATTR_SET: u32 = 0x215;
+    /// XATTR_LIST(dir, path_len). reply: [status, n]; names, each
+    /// followed by NUL, at window[0..n].
+    pub const XATTR_LIST: u32 = 0x216;
+    /// XATTR_REMOVE(dir, path_len, name_len). reply: [status]
+    pub const XATTR_REMOVE: u32 = 0x217;
+    /// SYNC(volume dir): everything written so far becomes durable.
+    /// reply: [status]
+    pub const SYNC: u32 = 0x218;
     /// TRASH(dir, path_len): move to the volume's trash. reply: [status, id]
     pub const TRASH: u32 = 0x220;
     /// TRASH_LIST(cookie, volume dir): `TrashEntry` records filling the
@@ -295,6 +309,24 @@ pub mod v2 {
     pub const TRASH_PURGE: u32 = 0x223;
     /// TRASH_EMPTY(volume dir). reply: [status, entries removed]
     pub const TRASH_EMPTY: u32 = 0x224;
+
+    /// SNAPSHOT(volume dir, op, name_len): name at window. Snapshots are
+    /// read-only views listed in the volume's `/.snapshots` directory.
+    /// reply: [status, id]
+    pub const SNAPSHOT: u32 = 0x230;
+    /// QUOTA(volume dir, op, uid, limit_blocks, limit_inodes): QUOTA_GET or
+    /// QUOTA_SET (limits in blocks of StatFs::block_size; 0 = none).
+    /// reply: [status, used_blocks, limit_blocks, used_inodes, limit_inodes]
+    pub const QUOTA: u32 = 0x231;
+    /// SCRUB(volume dir, cursor, budget blocks): verify checksums from the
+    /// device; cursor 0 starts (with all metadata), continue with `next`.
+    /// reply: [status, next (0 = done), data blocks checked, bad nodes,
+    /// bad blocks]; bad block numbers (u64) at window, as many as fit.
+    pub const SCRUB: u32 = 0x232;
+    /// FSCK(volume dir, flags=FSCK_REPAIR?): check the volume (and repair
+    /// it). reply: [status, problems found (0 = clean), items dropped,
+    /// objects moved to /lost+found]; a message at window, NUL-terminated.
+    pub const FSCK: u32 = 0x233;
 
     // ── flags ───────────────────────────────────────────────────────────
     pub const O_READ: u64 = 1 << 0;
@@ -316,6 +348,22 @@ pub mod v2 {
     pub const FSYNC_DATA: u64 = 1 << 0;
     /// COPY_RANGE: fail with EOPNOTSUPP rather than copy the bytes.
     pub const COPY_REFLINK_ONLY: u64 = 1 << 0;
+
+    pub const XATTR_CREATE: u64 = 1 << 0;
+    pub const XATTR_REPLACE: u64 = 1 << 1;
+    /// Longest attribute name and value.
+    pub const XATTR_NAME_MAX: usize = 255;
+    pub const XATTR_SIZE_MAX: usize = 65536;
+
+    pub const SNAPSHOT_CREATE: u64 = 1;
+    pub const SNAPSHOT_DELETE: u64 = 2;
+    /// Name of the snapshot directory at a volume's root.
+    pub const SNAPSHOT_DIR: &[u8] = b".snapshots";
+
+    pub const QUOTA_GET: u64 = 1;
+    pub const QUOTA_SET: u64 = 2;
+
+    pub const FSCK_REPAIR: u64 = 1 << 0;
 
     pub const SETATTR_MODE: u64 = 1 << 0;
     pub const SETATTR_UID: u64 = 1 << 1;
@@ -371,6 +419,10 @@ pub mod v2 {
     pub const FEATURE_SPARSE: u64 = 1 << 4;
     pub const FEATURE_PERSISTENT: u64 = 1 << 5;
     pub const FEATURE_READONLY: u64 = 1 << 6;
+    pub const FEATURE_XATTR: u64 = 1 << 7;
+    pub const FEATURE_SNAPSHOTS: u64 = 1 << 8;
+    pub const FEATURE_QUOTA: u64 = 1 << 9;
+    pub const FEATURE_SCRUB: u64 = 1 << 10;
 
     /// One directory entry in a READDIR batch: this header, then `name_len`
     /// bytes of name, padded so the next record is 8-aligned (`rec_len`).
