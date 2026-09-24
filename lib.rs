@@ -199,3 +199,213 @@ pub fn cstr_len(buf: &[u8]) -> usize {
 // conditions use the `vfs` facility, and filesystem-format errors from
 // CruxFS pass through with the `cfs` facility.
 pub use zigbone_abi::errors::{Error, Status, cfs as cfs_errors, vfs as errors};
+
+// ════════════════════════════════════════════════════════════════════════
+// Protocol v2 (docs/architecture/vfs.md in crux-os)
+// ════════════════════════════════════════════════════════════════════════
+
+/// VFS protocol v2: sessions over IPC v2 channels with a shared-memory
+/// window for paths and bulk data.
+///
+/// A client connects to the service [`v2::SERVICE`], then sends
+/// [`v2::HELLO`] with a shared-memory region (the *window*) moved in
+/// payload slot 0. Requests carry integer arguments in the message
+/// payload; paths and data travel in the window: a request's path starts
+/// at window offset 0 (a second path, for rename/link/symlink, follows the
+/// first), write data at offset 0; replies put data, `Stat`, directory
+/// records at offset 0. One request in flight per session.
+///
+/// Reply: `payload[0]` = status (0 or a negative `facility:code`), then
+/// operation-specific results.
+pub mod v2 {
+    /// Service-directory name.
+    pub const SERVICE: &[u8] = b"vfs";
+    pub const VERSION: u64 = 2;
+
+    /// Longest path, in bytes (NUL not included).
+    pub const PATH_MAX: usize = 32768;
+    /// Longest name of one path component.
+    pub const NAME_MAX: usize = 255;
+    /// Window size clients create by default (paths + one 1 MiB transfer).
+    pub const WINDOW_DEFAULT: usize = 1 << 20;
+    /// Smallest window the server accepts (must hold a PATH_MAX path).
+    pub const WINDOW_MIN: usize = 64 * 1024;
+    /// Most symbolic links followed while resolving one path.
+    pub const SYMLINK_MAX: usize = 40;
+    /// Directory handle meaning "the root" for *at-style operations.
+    pub const ROOT: u64 = u64::MAX;
+
+    // ── operations ──────────────────────────────────────────────────────
+    /// HELLO: window handle moved in slot 0.
+    /// reply: [status, VERSION, window bytes]
+    pub const HELLO: u32 = 0x200;
+    /// OPEN(dir, path_len, flags, mode): path at window[0..path_len].
+    /// reply: [status, handle]; Stat of the opened object at window[0].
+    pub const OPEN: u32 = 0x201;
+    /// CLOSE(h). reply: [status]
+    pub const CLOSE: u32 = 0x202;
+    /// READ(h, offset, len): len <= window. reply: [status, n]; data at window[0..n].
+    pub const READ: u32 = 0x203;
+    /// WRITE(h, offset, len, flags): data at window[0..len]; WRITE_APPEND
+    /// ignores offset. reply: [status, n, new offset]
+    pub const WRITE: u32 = 0x204;
+    /// STAT(dir, path_len, flags=AT_NOFOLLOW?). reply: [status]; Stat at window[0].
+    pub const STAT: u32 = 0x205;
+    /// FSTAT(h). reply: [status]; Stat at window[0].
+    pub const FSTAT: u32 = 0x206;
+    /// TRUNCATE(h, size). reply: [status]
+    pub const TRUNCATE: u32 = 0x207;
+    /// FSYNC(h, flags=FSYNC_DATA?). reply: [status]
+    pub const FSYNC: u32 = 0x208;
+    /// MKDIR(dir, path_len, mode). reply: [status]
+    pub const MKDIR: u32 = 0x209;
+    /// UNLINK(dir, path_len, flags=AT_REMOVEDIR?). reply: [status]
+    pub const UNLINK: u32 = 0x20A;
+    /// RENAME(olddir, old_len, newdir, new_len, flags): old path at
+    /// window[0..old_len], new path right after it. reply: [status]
+    pub const RENAME: u32 = 0x20B;
+    /// LINK(olddir, old_len, newdir, new_len, flags): layout as RENAME.
+    pub const LINK: u32 = 0x20C;
+    /// SYMLINK(dir, path_len, target_len): path, then target. reply: [status]
+    pub const SYMLINK: u32 = 0x20D;
+    /// READLINK(dir, path_len). reply: [status, n]; target at window[0..n].
+    pub const READLINK: u32 = 0x20E;
+    /// READDIR(h, cookie): a batch of `Dirent` records filling the window.
+    /// Cookie 0 = start. reply: [status, count, next cookie, eof]
+    pub const READDIR: u32 = 0x20F;
+    /// SETATTR(h, mask, mode, uid<<32|gid, atime_ns, mtime_ns). reply: [status]
+    pub const SETATTR: u32 = 0x210;
+    /// STATFS(dir). reply: [status]; StatFs at window[0].
+    pub const STATFS: u32 = 0x211;
+    /// FALLOCATE(h, offset, len, flags). reply: [status]
+    pub const FALLOCATE: u32 = 0x212;
+    /// COPY_RANGE(src, src_off, dst, dst_off, len, flags): copy inside the
+    /// server; shares extents (reflink) where the filesystem can.
+    /// reply: [status, bytes copied]
+    pub const COPY_RANGE: u32 = 0x213;
+    /// TRASH(dir, path_len): move to the volume's trash. reply: [status, id]
+    pub const TRASH: u32 = 0x220;
+    /// TRASH_LIST(cookie, volume dir): `TrashEntry` records filling the
+    /// window. reply: [status, count, next cookie, eof]
+    pub const TRASH_LIST: u32 = 0x221;
+    /// TRASH_RESTORE(id, volume dir, dest dir, dest_len): dest_len 0 =
+    /// the original path. reply: [status]
+    pub const TRASH_RESTORE: u32 = 0x222;
+    /// TRASH_PURGE(id, volume dir). reply: [status]
+    pub const TRASH_PURGE: u32 = 0x223;
+    /// TRASH_EMPTY(volume dir). reply: [status, entries removed]
+    pub const TRASH_EMPTY: u32 = 0x224;
+
+    // ── flags ───────────────────────────────────────────────────────────
+    pub const O_READ: u64 = 1 << 0;
+    pub const O_WRITE: u64 = 1 << 1;
+    pub const O_CREATE: u64 = 1 << 2;
+    pub const O_EXCL: u64 = 1 << 3;
+    pub const O_TRUNC: u64 = 1 << 4;
+    pub const O_APPEND: u64 = 1 << 5;
+    pub const O_DIRECTORY: u64 = 1 << 6;
+    pub const O_NOFOLLOW: u64 = 1 << 7;
+
+    pub const AT_NOFOLLOW: u64 = 1 << 0;
+    pub const AT_REMOVEDIR: u64 = 1 << 1;
+
+    pub const RENAME_NOREPLACE: u64 = 1 << 0;
+    pub const RENAME_EXCHANGE: u64 = 1 << 1;
+
+    pub const WRITE_APPEND: u64 = 1 << 0;
+    pub const FSYNC_DATA: u64 = 1 << 0;
+    /// COPY_RANGE: fail with EOPNOTSUPP rather than copy the bytes.
+    pub const COPY_REFLINK_ONLY: u64 = 1 << 0;
+
+    pub const SETATTR_MODE: u64 = 1 << 0;
+    pub const SETATTR_UID: u64 = 1 << 1;
+    pub const SETATTR_GID: u64 = 1 << 2;
+    pub const SETATTR_ATIME: u64 = 1 << 3;
+    pub const SETATTR_MTIME: u64 = 1 << 4;
+
+    // ── object kinds ────────────────────────────────────────────────────
+    pub const KIND_FILE: u8 = 1;
+    pub const KIND_DIR: u8 = 2;
+    pub const KIND_SYMLINK: u8 = 3;
+    pub const KIND_FIFO: u8 = 4;
+
+    /// Metadata of a file system object.
+    #[repr(C)]
+    #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+    pub struct Stat {
+        pub ino: u64,
+        pub dev: u64,
+        pub size: u64,
+        /// Bytes of storage actually allocated (sparse files use less).
+        pub allocated: u64,
+        pub atime_ns: u64,
+        pub mtime_ns: u64,
+        pub ctime_ns: u64,
+        pub btime_ns: u64,
+        pub mode: u32,
+        pub nlink: u32,
+        pub uid: u32,
+        pub gid: u32,
+        pub kind: u8,
+        pub _pad: [u8; 7],
+    }
+
+    /// Volume statistics.
+    #[repr(C)]
+    #[derive(Copy, Clone, Debug, Default)]
+    pub struct StatFs {
+        pub block_size: u64,
+        pub total_blocks: u64,
+        pub free_blocks: u64,
+        pub total_inodes: u64,
+        pub free_inodes: u64,
+        pub name_max: u64,
+        /// FEATURE_* bits.
+        pub features: u64,
+        pub dev: u64,
+    }
+    pub const FEATURE_REFLINK: u64 = 1 << 0;
+    pub const FEATURE_TRASH: u64 = 1 << 1;
+    pub const FEATURE_HARDLINKS: u64 = 1 << 2;
+    pub const FEATURE_SYMLINKS: u64 = 1 << 3;
+    pub const FEATURE_SPARSE: u64 = 1 << 4;
+    pub const FEATURE_PERSISTENT: u64 = 1 << 5;
+    pub const FEATURE_READONLY: u64 = 1 << 6;
+
+    /// One directory entry in a READDIR batch: this header, then `name_len`
+    /// bytes of name, padded so the next record is 8-aligned (`rec_len`).
+    #[repr(C)]
+    #[derive(Copy, Clone, Debug, Default)]
+    pub struct Dirent {
+        pub ino: u64,
+        /// Cookie that resumes the listing after this entry.
+        pub next: u64,
+        pub kind: u8,
+        pub _pad: u8,
+        pub name_len: u16,
+        pub rec_len: u32,
+    }
+    pub const DIRENT_HEADER: usize = core::mem::size_of::<Dirent>();
+
+    /// One trashed item in a TRASH_LIST batch: header, then the original
+    /// path (`path_len` bytes), padded to 8 (`rec_len`).
+    #[repr(C)]
+    #[derive(Copy, Clone, Debug, Default)]
+    pub struct TrashEntry {
+        pub id: u64,
+        pub deleted_ns: u64,
+        pub size: u64,
+        pub next: u64,
+        pub kind: u8,
+        pub _pad: [u8; 3],
+        pub path_len: u32,
+        pub rec_len: u32,
+        pub _pad2: u32,
+    }
+    pub const TRASH_HEADER: usize = core::mem::size_of::<TrashEntry>();
+
+    /// Record length for a header of `header` bytes plus `n` bytes, 8-aligned.
+    pub const fn rec_len(header: usize, n: usize) -> usize {
+        (header + n + 7) & !7
+    }
+}
