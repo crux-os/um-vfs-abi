@@ -139,17 +139,6 @@ pub const KIND_DIR:     u64 = 2;
 pub const KIND_SYMLINK: u64 = 3;
 
 // ── status codes (negative on error, POSIX errno) ───────────────────────
-pub const E_OK:          i64 = 0;
-pub const E_NOTFOUND:    i64 = -2;
-pub const E_IO:          i64 = -5;
-pub const E_BADF:        i64 = -9;
-pub const E_EXISTS:      i64 = -17;
-pub const E_NOTDIR:      i64 = -20;
-pub const E_ISDIR:       i64 = -21;
-pub const E_INVAL:       i64 = -22;
-pub const E_NOSPC:       i64 = -28;
-pub const E_NAMETOOLONG: i64 = -36;
-pub const E_NOSYS:       i64 = -38;
 
 // ── open modes (bitfield) ───────────────────────────────────────────────
 pub const MODE_READ:     u64 = 1 << 0;
@@ -201,3 +190,12 @@ pub fn cstr_len(buf: &[u8]) -> usize {
     while i < buf.len() && buf[i] != 0 { i += 1; }
     i
 }
+
+// ── status codes ────────────────────────────────────────────────────────
+//
+// Reply status (payload[0]) is a system status from the error registry
+// (zigbone_abi::errors): 0 = OK, else `facility:code`. Generic errors
+// (ENOENT, EIO, ENOSPC, ...) are used wherever they fit; VFS-specific
+// conditions use the `vfs` facility, and filesystem-format errors from
+// CruxFS pass through with the `cfs` facility.
+pub use zigbone_abi::errors::{Error, Status, cfs as cfs_errors, vfs as errors};

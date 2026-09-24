@@ -9,3 +9,6 @@ description = "Crux OS VFS IPC protocol -- shared between vfs server and clients
 [lib]
 name = "um_vfs_abi"
 path = "lib.rs"
+
+[dependencies]
+zigbone-abi = { git = "https://github.com/crux-os/zigbone-abi.git" }
