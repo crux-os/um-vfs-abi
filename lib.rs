@@ -86,42 +86,51 @@ pub const OP_TRUNCATE:  u32 = 0x18;
 ///            payload[1]=blocks_reclaimed
 pub const OP_GC:        u32 = 0x19;
 
-/// SHM_ECHO -- proof-of-concept for the SYS_SHM_CREATE/SYS_SHM_MAP
-/// zero-copy shared-memory primitive: the caller creates a shared
-/// region, writes bytes into it, and sends um-vfs the region id +
-/// byte count -- NOT the bytes themselves, unlike every other op
-/// here (which embed up to INLINE_BYTES per message). um-vfs maps
-/// the SAME physical pages and reads directly from them.
-///   request: payload[0]=shm_id, payload[1]=len
-///   reply:   payload[0]=status, payload[1]=bytes echoed back
-///            (um-vfs writes its own reply text into the FIRST few
-///            bytes of the same shared region, overwriting the
-///            request -- the caller re-reads through its own mapping)
+/// SHM_ECHO -- smoke test for shared memory. Sent WITH a region handle
+/// attached (SYS_IPC_SEND_HANDLE, slot 0). um-vfs maps the region, logs
+/// the first `len` bytes, writes its reply text over the start of the
+/// region, then unmaps and closes its handle.
+///   request: payload[0]=handle (attached), payload[1]=len
+///   reply:   payload[0]=status, payload[1]=reply length
 pub const OP_SHM_ECHO:  u32 = 0x1a;
 
-/// READ_SHM -- bulk read into a shared-memory region (see SYS_SHM_*).
-/// um-vfs maps the caller's region once (cached per region id) and reads
-/// file data straight into it: no per-32-byte IPC round trips.
+/// READ_SHM -- bulk read into an attached region (see OP_SHM_ATTACH):
+/// um-vfs reads file data straight into the region, no per-32-byte IPC.
 ///   request: payload[0]=handle, payload[1]=file_offset,
-///            payload[2]=shm_id, payload[3]=shm_offset, payload[4]=len
+///            payload[2]=region token, payload[3]=region_offset, payload[4]=len
 ///   reply:   payload[0]=status, payload[1]=bytes_read (0 = EOF; fewer
 ///            than `len` only at EOF)
-/// Contract: the region must be at least BULK_REGION_BYTES long,
-/// shm_offset+len <= BULK_REGION_BYTES and len <= BULK_MAX_BYTES; um-vfs
-/// rejects (E_INVAL) anything outside that. It cannot verify the region's
-/// real size, so clients must create it with `BULK_REGION_BYTES` or more.
+/// len <= BULK_MAX_BYTES and region_offset+len <= the region's size,
+/// else E_INVAL.
 pub const OP_READ_SHM:  u32 = 0x1b;
 
-/// WRITE_SHM -- bulk write from a shared-memory region. Same layout and
-/// contract as OP_READ_SHM; reply payload[1] = bytes_written. Writes to a
-/// CruxFS handle must stay sequential, exactly like OP_WRITE.
+/// WRITE_SHM -- bulk write from an attached region. Same layout as
+/// OP_READ_SHM; reply payload[1] = bytes_written. Writes to a CruxFS
+/// handle must stay sequential, exactly like OP_WRITE.
 pub const OP_WRITE_SHM: u32 = 0x1c;
 
-/// Minimum size a client must give the region it passes to *_SHM ops.
-pub const BULK_REGION_BYTES: usize = 256 * 1024;
-/// Largest single *_SHM transfer (half the region, so a client can
-/// double-buffer if it wants to).
-pub const BULK_MAX_BYTES: usize = 128 * 1024;
+/// SHM_ATTACH -- hand um-vfs a shared region for bulk transfers. Sent
+/// with the region handle attached (SYS_IPC_SEND_HANDLE, slot 0). um-vfs
+/// maps it once, checks its real size (SYS_SHM_SIZE) and returns a token
+/// naming it in later *_SHM requests.
+///   request: payload[0]=handle (attached)
+///   reply:   payload[0]=status (E_INVAL if smaller than
+///            BULK_MIN_REGION_BYTES, E_NOSPC if too many attached),
+///            payload[1]=token, payload[2]=region size in bytes
+pub const OP_SHM_ATTACH: u32 = 0x1d;
+
+/// SHM_DETACH -- um-vfs unmaps the region and drops its handle.
+///   request: payload[0]=token
+///   reply:   payload[0]=status
+pub const OP_SHM_DETACH: u32 = 0x1e;
+
+/// Smallest region OP_SHM_ATTACH accepts.
+pub const BULK_MIN_REGION_BYTES: usize = 4096;
+/// Largest single *_SHM transfer.
+pub const BULK_MAX_BYTES: usize = 1024 * 1024;
+/// Region size clients should create for bulk transfers (room for two
+/// maximal transfers, so a client can double-buffer).
+pub const BULK_REGION_BYTES: usize = 2 * BULK_MAX_BYTES;
 
 // ── kinds ───────────────────────────────────────────────────────────────
 pub const KIND_NONE:    u64 = 0;     // also used as "absent / EOF"
