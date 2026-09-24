@@ -12,23 +12,4 @@ dependencies = [
 [[package]]
 name = "zigbone-abi"
 version = "0.1.0"
-
-[[patch.unused]]
-name = "um-cfs"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "um-parttable-abi"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "block-abi"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "km-ps2-abi"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "runtime"
-version = "0.1.0"
+source = "git+https://github.com/crux-os/zigbone-abi.git#cb57a4f684cf0f67898f4de21331285492bcd587"
