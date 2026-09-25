@@ -204,7 +204,16 @@ pub const SNAPSHOT_AT: u32 = 0x235;
 pub const SUBVOLUME_DELETE: u32 = 0x236;
 
 // ── flags ───────────────────────────────────────────────────────────
+// ── OPEN flags ──────────────────────────────────────────────────────
+// Access: every OPEN says what the handle is for -- at least one of
+// O_READ, O_WRITE, O_WRITE_ATTR (EINVAL otherwise, like an access mode
+// in POSIX open or dwDesiredAccess in CreateFile) -- and a handle does
+// only that (EBADF otherwise). Asking for write access to something on a
+// read-only file system fails at OPEN with EROFS.
+
+/// Read data; list a directory.
 pub const O_READ: u64 = 1 << 0;
+/// Write data, truncate.
 pub const O_WRITE: u64 = 1 << 1;
 pub const O_CREATE: u64 = 1 << 2;
 pub const O_EXCL: u64 = 1 << 3;
@@ -212,6 +221,18 @@ pub const O_TRUNC: u64 = 1 << 4;
 pub const O_APPEND: u64 = 1 << 5;
 pub const O_DIRECTORY: u64 = 1 << 6;
 pub const O_NOFOLLOW: u64 = 1 << 7;
+/// Change attributes (SETATTR: mode, owner, times, flags), also of a
+/// directory. The owner's right.
+pub const O_WRITE_ATTR: u64 = 1 << 8;
+/// Manage the volume the directory is on: snapshots, quotas, repair,
+/// restoring and purging the trash. The owner's right.
+pub const O_MANAGE: u64 = 1 << 9;
+/// The access bits: an OPEN needs at least one. Permissions are checked
+/// once, at OPEN (EACCES: no handle). When they change (or the volume
+/// turns read-only), every open handle loses at once the rights they no
+/// longer give: calls needing a lost right fail with EACCES; a handle
+/// left with none can only be closed.
+pub const O_ACCESS: u64 = O_READ | O_WRITE | O_WRITE_ATTR | O_MANAGE;
 
 pub const AT_NOFOLLOW: u64 = 1 << 0;
 pub const AT_REMOVEDIR: u64 = 1 << 1;
