@@ -134,7 +134,8 @@ pub const READLINK: u32 = 0x20E;
 /// READDIR(h, cookie): a batch of `Dirent` records filling the window.
 /// Cookie 0 = start. reply: [status, count, next cookie, eof]
 pub const READDIR: u32 = 0x20F;
-/// SETATTR(h, mask, mode, uid<<32|gid, atime_ns, mtime_ns). reply: [status]
+/// SETATTR(h, mask, flags<<32|mode, uid<<32|gid, atime_ns, mtime_ns).
+/// reply: [status]
 pub const SETATTR: u32 = 0x210;
 /// STATFS(dir). reply: [status]; StatFs at window[0].
 pub const STATFS: u32 = 0x211;
@@ -245,6 +246,14 @@ pub const SETATTR_UID: u64 = 1 << 1;
 pub const SETATTR_GID: u64 = 1 << 2;
 pub const SETATTR_ATIME: u64 = 1 << 3;
 pub const SETATTR_MTIME: u64 = 1 << 4;
+/// `Stat::flags` (FLAG_*), in bits 32..40 of the mode word.
+pub const SETATTR_FLAGS: u64 = 1 << 5;
+
+// ── object flags (Stat::flags) ──────────────────────────────────────
+/// Not listed by default (`ls` without -a, file dialogs); like a name
+/// starting with '.', but set on the object (FAT/exFAT: the hidden
+/// attribute).
+pub const FLAG_HIDDEN: u8 = 1 << 0;
 
 // ── object kinds ────────────────────────────────────────────────────
 pub const KIND_FILE: u8 = 1;
@@ -270,7 +279,9 @@ pub struct Stat {
     pub uid: u32,
     pub gid: u32,
     pub kind: u8,
-    pub _pad: [u8; 7],
+    /// FLAG_*.
+    pub flags: u8,
+    pub _pad: [u8; 6],
 }
 
 /// Volume statistics.

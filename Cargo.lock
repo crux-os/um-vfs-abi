@@ -22,13 +22,13 @@ name = "runtime"
 version = "0.1.0"
 
 [[patch.unused]]
+name = "block-abi"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "km-ps2-abi"
 version = "0.1.0"
 
 [[patch.unused]]
 name = "um-parttable-abi"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "block-abi"
 version = "0.1.0"
