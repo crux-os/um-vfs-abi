@@ -287,6 +287,27 @@ pub struct StatFs {
     pub features: u64,
     pub dev: u64,
 }
+/// `StatFs::dev` of a volume on a disk partition (every /volN):
+/// `VOLUME_DEV | disk << 48 | start`, `disk` the block slot index
+/// (BLK_DEVn), `start` the partition's first sector -- so a tool can tell
+/// which partition a mount point is (the installer finds the volume it
+/// just created). Other file systems (tmpfs, the boot archive) have small
+/// numbers without this bit.
+pub const VOLUME_DEV: u64 = 1 << 63;
+
+pub const fn volume_dev(disk: u64, start: u64) -> u64 {
+    VOLUME_DEV | (disk & 0x7FFF) << 48 | (start & 0xFFFF_FFFF_FFFF)
+}
+
+/// (disk, start) of a volume's `dev`, None for other file systems.
+pub const fn volume_source(dev: u64) -> Option<(u64, u64)> {
+    if dev & VOLUME_DEV == 0 {
+        None
+    } else {
+        Some(((dev >> 48) & 0x7FFF, dev & 0xFFFF_FFFF_FFFF))
+    }
+}
+
 pub const FEATURE_REFLINK: u64 = 1 << 0;
 pub const FEATURE_TRASH: u64 = 1 << 1;
 pub const FEATURE_HARDLINKS: u64 = 1 << 2;
