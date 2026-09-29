@@ -17,61 +17,6 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(missing_docs)]
 
-// ── status codes (negative on error, POSIX errno) ───────────────────────
-
-// ── open modes (bitfield) ───────────────────────────────────────────────
-pub const MODE_READ: u64 = 1 << 0;
-pub const MODE_WRITE: u64 = 1 << 1;
-pub const MODE_TRUNCATE: u64 = 1 << 2;
-pub const MODE_CREATE: u64 = 1 << 3;
-pub const MODE_DIR: u64 = 1 << 4; // open() asserts entry is a dir
-
-// ── inline-payload helpers ──────────────────────────────────────────────
-//
-// `payload[2..6]` carries 32 bytes of either a path or data.  Both ends
-// agree on this packing:
-
-pub const INLINE_BYTES: usize = 32;
-
-/// Pack a path/data slice into payload[2..6].  Returns the slice
-/// actually packed (truncated to INLINE_BYTES) so callers can detect
-/// over-long paths and surface E_NAMETOOLONG locally.
-#[inline]
-pub fn pack_inline(payload: &mut [u64; 6], bytes: &[u8]) -> usize {
-    let n = core::cmp::min(bytes.len(), INLINE_BYTES);
-    let mut buf = [0u8; INLINE_BYTES];
-    buf[..n].copy_from_slice(&bytes[..n]);
-    payload[2] = u64::from_le_bytes(buf[0..8].try_into().unwrap());
-    payload[3] = u64::from_le_bytes(buf[8..16].try_into().unwrap());
-    payload[4] = u64::from_le_bytes(buf[16..24].try_into().unwrap());
-    payload[5] = u64::from_le_bytes(buf[24..32].try_into().unwrap());
-    n
-}
-
-/// Unpack payload[2..6] into a 32-byte buffer.  Callers detect the
-/// effective end via the first NUL byte (for paths) or use an
-/// explicit length carried elsewhere (for inline reads).
-#[inline]
-pub fn unpack_inline(payload: &[u64; 6]) -> [u8; INLINE_BYTES] {
-    let mut buf = [0u8; INLINE_BYTES];
-    buf[0..8].copy_from_slice(&payload[2].to_le_bytes());
-    buf[8..16].copy_from_slice(&payload[3].to_le_bytes());
-    buf[16..24].copy_from_slice(&payload[4].to_le_bytes());
-    buf[24..32].copy_from_slice(&payload[5].to_le_bytes());
-    buf
-}
-
-/// Return the index of the first NUL byte in `buf`, or `buf.len()` if
-/// none exists.  Used to compute path length from unpacked inline.
-#[inline]
-pub fn cstr_len(buf: &[u8]) -> usize {
-    let mut i = 0;
-    while i < buf.len() && buf[i] != 0 {
-        i += 1;
-    }
-    i
-}
-
 // ── status codes ────────────────────────────────────────────────────────
 //
 // Reply status (payload[0]) is a system status from the error registry
@@ -107,7 +52,8 @@ pub const HELLO: u32 = 0x200;
 pub const OPEN: u32 = 0x201;
 /// CLOSE(h). reply: [status]
 pub const CLOSE: u32 = 0x202;
-/// READ(h, offset, len): len <= window. reply: [status, n]; data at window[0..n].
+/// READ(h, offset, len): len <= window. reply: [status, n]; data at
+/// window[0..n]. n < len only at the end of the file.
 pub const READ: u32 = 0x203;
 /// WRITE(h, offset, len, flags): data at window[0..len]; WRITE_APPEND
 /// ignores offset. reply: [status, n, new offset]
@@ -161,6 +107,12 @@ pub const XATTR_REMOVE: u32 = 0x217;
 /// SYNC(volume dir): everything written so far becomes durable.
 /// reply: [status]
 pub const SYNC: u32 = 0x218;
+/// READ_FILE(dir, path_len): open for reading and read from the start,
+/// the window's worth. reply: [status, n, h, size]; data at
+/// window[0..n]. n < window: that is the whole file, nothing stays open.
+/// Otherwise h is open for reading the rest (READ from n, then CLOSE)
+/// and size is the file's size at open.
+pub const READ_FILE: u32 = 0x219;
 /// TRASH(dir, path_len): move to the volume's trash. reply: [status, id]
 pub const TRASH: u32 = 0x220;
 /// TRASH_LIST(cookie, volume dir): `TrashEntry` records filling the
