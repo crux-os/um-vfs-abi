@@ -20,11 +20,11 @@
 // ── status codes (negative on error, POSIX errno) ───────────────────────
 
 // ── open modes (bitfield) ───────────────────────────────────────────────
-pub const MODE_READ:     u64 = 1 << 0;
-pub const MODE_WRITE:    u64 = 1 << 1;
+pub const MODE_READ: u64 = 1 << 0;
+pub const MODE_WRITE: u64 = 1 << 1;
 pub const MODE_TRUNCATE: u64 = 1 << 2;
-pub const MODE_CREATE:   u64 = 1 << 3;
-pub const MODE_DIR:      u64 = 1 << 4;     // open() asserts entry is a dir
+pub const MODE_CREATE: u64 = 1 << 3;
+pub const MODE_DIR: u64 = 1 << 4; // open() asserts entry is a dir
 
 // ── inline-payload helpers ──────────────────────────────────────────────
 //
@@ -41,8 +41,8 @@ pub fn pack_inline(payload: &mut [u64; 6], bytes: &[u8]) -> usize {
     let n = core::cmp::min(bytes.len(), INLINE_BYTES);
     let mut buf = [0u8; INLINE_BYTES];
     buf[..n].copy_from_slice(&bytes[..n]);
-    payload[2] = u64::from_le_bytes(buf[ 0.. 8].try_into().unwrap());
-    payload[3] = u64::from_le_bytes(buf[ 8..16].try_into().unwrap());
+    payload[2] = u64::from_le_bytes(buf[0..8].try_into().unwrap());
+    payload[3] = u64::from_le_bytes(buf[8..16].try_into().unwrap());
     payload[4] = u64::from_le_bytes(buf[16..24].try_into().unwrap());
     payload[5] = u64::from_le_bytes(buf[24..32].try_into().unwrap());
     n
@@ -54,8 +54,8 @@ pub fn pack_inline(payload: &mut [u64; 6], bytes: &[u8]) -> usize {
 #[inline]
 pub fn unpack_inline(payload: &[u64; 6]) -> [u8; INLINE_BYTES] {
     let mut buf = [0u8; INLINE_BYTES];
-    buf[ 0.. 8].copy_from_slice(&payload[2].to_le_bytes());
-    buf[ 8..16].copy_from_slice(&payload[3].to_le_bytes());
+    buf[0..8].copy_from_slice(&payload[2].to_le_bytes());
+    buf[8..16].copy_from_slice(&payload[3].to_le_bytes());
     buf[16..24].copy_from_slice(&payload[4].to_le_bytes());
     buf[24..32].copy_from_slice(&payload[5].to_le_bytes());
     buf
@@ -66,7 +66,9 @@ pub fn unpack_inline(payload: &[u64; 6]) -> [u8; INLINE_BYTES] {
 #[inline]
 pub fn cstr_len(buf: &[u8]) -> usize {
     let mut i = 0;
-    while i < buf.len() && buf[i] != 0 { i += 1; }
+    while i < buf.len() && buf[i] != 0 {
+        i += 1;
+    }
     i
 }
 
