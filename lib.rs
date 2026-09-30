@@ -45,8 +45,16 @@ pub const ROOT: u64 = u64::MAX;
 
 // ── operations ──────────────────────────────────────────────────────
 /// HELLO: window handle moved in slot 0.
-/// reply: [status, VERSION, window bytes]
+/// reply: [status, VERSION, window bytes, change page]: the change page
+/// is a read-only shared-memory handle (MSG_FLAG_HANDLE), see [`CHANGES_SLOT`].
 pub const HELLO: u32 = 0x200;
+/// Reply slot of HELLO with the change page: one page, a u64 counter at
+/// offset 0 that the server increments after every request that may
+/// change what STAT, FSTAT, READLINK or READDIR report (anyone's), and
+/// after mounts and unmounts. A client may keep a result while the
+/// counter still reads what it read before sending that request: no
+/// request needed to ask again.
+pub const CHANGES_SLOT: usize = 3;
 /// OPEN(dir, path_len, flags, mode): path at window[0..path_len].
 /// reply: [status, handle]; Stat of the opened object at window[0].
 pub const OPEN: u32 = 0x201;
