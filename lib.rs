@@ -55,9 +55,21 @@ pub const HELLO: u32 = 0x200;
 /// counter still reads what it read before sending that request: no
 /// request needed to ask again.
 pub const CHANGES_SLOT: usize = 3;
-/// OPEN(dir, path_len, flags, mode): path at window[0..path_len].
-/// reply: [status, handle]; Stat of the opened object at window[0].
+/// OPEN(dir, path_len, flags, mode, ahead): path at window[0..path_len].
+/// reply: [status, handle, n, read]; Stat of the opened object at
+/// window[0]. With `ahead` > 0 and a regular file opened for reading, the
+/// server also reads its first bytes, up to `ahead`, into
+/// window[OPEN_DATA_AT..][..n] and sets `read` to 1: n < ahead means that
+/// is the whole file (at the time of the request, see [`CHANGES_SLOT`]).
 pub const OPEN: u32 = 0x201;
+/// Where OPEN puts the data read ahead.
+pub const OPEN_DATA_AT: usize = 4096;
+/// Opcode bits 16..32 of any request may carry `h + 1` for a handle to
+/// close before the request is served (quietly: no status for it). A
+/// client closes read-only handles this way, riding its next request.
+pub const CLOSE_FIRST_SHIFT: u32 = 16;
+/// Largest handle [`CLOSE_FIRST_SHIFT`] can carry.
+pub const CLOSE_FIRST_MAX: u64 = 0xFFFE;
 /// CLOSE(h). reply: [status]
 pub const CLOSE: u32 = 0x202;
 /// READ(h, offset, len): len <= window. reply: [status, n]; data at
