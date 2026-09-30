@@ -133,6 +133,27 @@ pub const SYNC: u32 = 0x218;
 /// Otherwise h is open for reading the rest (READ from n, then CLOSE)
 /// and size is the file's size at open.
 pub const READ_FILE: u32 = 0x219;
+/// VIEW(h, reads): a read-only shared view of regular file `h` (opened
+/// for reading), for a client that reads it at scattered places
+/// (`reads`: how many so far; the server may want more before it copies
+/// a big file). reply: [status, _, _, view]: the view is a
+/// read-only shared-memory handle in [`VIEW_SLOT`] laid out as
+/// [`VIEW_SIZE_AT`], [`VIEW_DEAD_AT`] and data from [`VIEW_DATA_AT`].
+/// The server keeps it the file's contents: writes and truncations
+/// land in it before their reply. While the dead word reads 0, bytes
+/// `[0, size)` of the data are the file; once it reads nonzero the view
+/// is left behind (unmap it; READ, or a new VIEW, from then on).
+/// EAGAIN: not yet worth it (ask again after more reads); EFBIG,
+/// ENOMEM: not for this file now.
+pub const VIEW: u32 = 0x21A;
+/// Reply slot of VIEW with the view's handle.
+pub const VIEW_SLOT: usize = 3;
+/// u64 at this offset of a view: the file's size.
+pub const VIEW_SIZE_AT: usize = 0;
+/// u64 at this offset of a view: nonzero once the view is left behind.
+pub const VIEW_DEAD_AT: usize = 8;
+/// Where a view's data starts.
+pub const VIEW_DATA_AT: usize = 4096;
 /// TRASH(dir, path_len): move to the volume's trash. reply: [status, id]
 pub const TRASH: u32 = 0x220;
 /// TRASH_LIST(cookie, volume dir): `TrashEntry` records filling the
