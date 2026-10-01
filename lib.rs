@@ -154,11 +154,14 @@ pub const VIEW_SIZE_AT: usize = 0;
 pub const VIEW_DEAD_AT: usize = 8;
 /// Where a view's data starts.
 pub const VIEW_DATA_AT: usize = 4096;
-/// FORK: a new session for a forked child: the same open files under
-/// the same handles (each its own copy: offsets part from here), the
-/// same identity, no window yet (HELLO first). reply: [status, -, -, -];
-/// the new session's channel moved in [`FORK_SLOT`]. The child takes
-/// that one; the parent closes its copy.
+/// FORK(count): a new session for a forked child (or a program started
+/// or exec'd with open files): the same open files under the same
+/// handles (each its own copy: offsets part from here), the same
+/// identity, no window yet (HELLO first). `count` 0: every open file
+/// (the one request a session may make before its HELLO); otherwise only
+/// the `count` handles listed as u64 at the start of the window.
+/// reply: [status, -, -, -]; the new session's channel moved in
+/// [`FORK_SLOT`]. The child takes that one; the parent closes its copy.
 pub const FORK: u32 = 0x21B;
 /// Reply slot of FORK with the new session's channel.
 pub const FORK_SLOT: usize = 3;
