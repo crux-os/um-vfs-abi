@@ -154,6 +154,14 @@ pub const VIEW_SIZE_AT: usize = 0;
 pub const VIEW_DEAD_AT: usize = 8;
 /// Where a view's data starts.
 pub const VIEW_DATA_AT: usize = 4096;
+/// FORK: a new session for a forked child: the same open files under
+/// the same handles (each its own copy: offsets part from here), the
+/// same identity, no window yet (HELLO first). reply: [status, -, -, -];
+/// the new session's channel moved in [`FORK_SLOT`]. The child takes
+/// that one; the parent closes its copy.
+pub const FORK: u32 = 0x21B;
+/// Reply slot of FORK with the new session's channel.
+pub const FORK_SLOT: usize = 3;
 /// TRASH(dir, path_len): move to the volume's trash. reply: [status, id]
 pub const TRASH: u32 = 0x220;
 /// TRASH_LIST(cookie, volume dir): `TrashEntry` records filling the
