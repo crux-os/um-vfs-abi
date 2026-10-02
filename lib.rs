@@ -241,6 +241,33 @@ pub const SNAPSHOT_AT: u32 = 0x235;
 /// the path with everything in it. reply: [status]
 pub const SUBVOLUME_DELETE: u32 = 0x236;
 
+/// MOUNTS(): every mounted file system, as `MountRec` records back to
+/// back in the window: the header, a [`StatFs`] (size, free, features --
+/// FEATURE_READONLY -- and `dev`: for a volume on a partition
+/// [`volume_source`] says which), then the file system's name (`fs_len`),
+/// its label (`label_len`) and the mount point (`path_len`), the record
+/// padded to 8 (`rec_len`). reply: [status, count]
+pub const MOUNTS: u32 = 0x240;
+/// UMOUNT(volume dir, flags=UMOUNT_FORCE?): take the volume away: what
+/// it holds is written out, then its mount point is gone and the
+/// partition stays unmounted (not mounted again by a rescan) until MOUNT
+/// or until the disk is unplugged. The handle is a volume handle (any
+/// read handle on it: a read-only volume cannot give O_MANAGE) and the
+/// caller the owner of the volume's root or an administrator.
+/// EBUSY while other handles are open on it, unless forced (what is open
+/// then fails, as when a disk is pulled). Only volumes of /volumes: the
+/// system volume, /tmp, /dev and /system stay. reply: [status]
+pub const UMOUNT: u32 = 0x241;
+/// MOUNT(dev): mount the partition `dev` ([`volume_dev`], the `dev` of
+/// MOUNTS records and of the partition list of um-parttable) that is not
+/// mounted (unmounted by UMOUNT, or not recognised when it appeared): the
+/// next /volumes/volN. Anyone brings back a volume that UMOUNT took
+/// away; a partition the system did not mount by itself is for
+/// administrators (EPERM). EBUSY if it is mounted. reply: [status]
+pub const MOUNT: u32 = 0x242;
+/// `UMOUNT` flags.
+pub const UMOUNT_FORCE: u64 = 1 << 0;
+
 // ── flags ───────────────────────────────────────────────────────────
 // ── OPEN flags ──────────────────────────────────────────────────────
 // Access: every OPEN says what the handle is for -- at least one of
@@ -414,6 +441,24 @@ pub const DIRENT_HEADER: usize = core::mem::size_of::<Dirent>();
 /// Where the name of a [`READDIR_PLUS`] record starts.
 pub const DIRENT_PLUS_HEADER: usize = DIRENT_HEADER + core::mem::size_of::<Stat>();
 
+/// One mounted file system in a MOUNTS reply: this header, then a
+/// [`StatFs`], then `fs_len` bytes of the file system's name ("CruxFS",
+/// "FAT", "NTFS", ...), `label_len` of its label (empty if it has none)
+/// and `path_len` of its mount point, padded so the next record is
+/// 8-aligned (`rec_len`).
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default)]
+pub struct MountRec {
+    pub rec_len: u32,
+    pub fs_len: u16,
+    pub label_len: u16,
+    pub path_len: u16,
+    pub _pad: [u8; 6],
+}
+/// Where the strings of a [`MountRec`] start.
+pub const MOUNT_REC_HEADER: usize =
+    core::mem::size_of::<MountRec>() + core::mem::size_of::<StatFs>();
+
 /// One trashed item in a TRASH_LIST batch: header, then the original
 /// path (`path_len` bytes), padded to 8 (`rec_len`).
 #[repr(C)]
@@ -463,7 +508,7 @@ pub const fn rec_len(header: usize, n: usize) -> usize {
 /// file system through the server, and making one may copy the file up.
 pub fn reads_only(op: u32, p: &[u64; 6]) -> bool {
     match op {
-        READ | READ_FILE | STAT | FSTAT | READLINK | READDIR | READDIR_PLUS | STATFS
+        READ | READ_FILE | STAT | FSTAT | READLINK | READDIR | READDIR_PLUS | STATFS | MOUNTS
         | TRASH_LIST | XATTR_GET | XATTR_LIST | CLOSE => true,
         VIEW => p[2] & VIEW_WRITE == 0,
         OPEN => p[2] & (O_CREATE | O_TRUNC) == 0,
@@ -474,6 +519,18 @@ pub fn reads_only(op: u32, p: &[u64; 6]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mount_records_are_aligned() {
+        assert_eq!(core::mem::size_of::<MountRec>() % 8, 0);
+        assert_eq!(MOUNT_REC_HEADER % 8, 0);
+        assert_eq!(rec_len(MOUNT_REC_HEADER, 3 + 5 + 9) % 8, 0);
+        // The operations are what they were said to be, apart from the rest.
+        let all = [MOUNTS, UMOUNT, MOUNT];
+        assert!(all.iter().all(|a| !reads_only(*a, &[0; 6]) || *a == MOUNTS));
+        assert!(reads_only(MOUNTS, &[0; 6]));
+        assert!(!reads_only(UMOUNT, &[0; 6]) && !reads_only(MOUNT, &[0; 6]));
+    }
 
     #[test]
     fn readdir_plus_attributes_or_the_flag() {
