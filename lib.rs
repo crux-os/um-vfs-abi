@@ -416,3 +416,54 @@ pub const TRASH_HEADER: usize = core::mem::size_of::<TrashEntry>();
 pub const fn rec_len(header: usize, n: usize) -> usize {
     (header + n + 7) & !7
 }
+
+/// Whether request `op` with arguments `p` only reads: the server may
+/// answer it while a file system's commit writes (it takes no right to
+/// change the file system). Opening without creating or truncating and
+/// closing change only what the server keeps in memory. A writable view
+/// ([`VIEW_WRITE`]) is a change: what clients store in it reaches the
+/// file system through the server, and making one may copy the file up.
+pub fn reads_only(op: u32, p: &[u64; 6]) -> bool {
+    match op {
+        READ | READ_FILE | STAT | FSTAT | READLINK | READDIR | STATFS | TRASH_LIST | XATTR_GET
+        | XATTR_LIST | CLOSE => true,
+        VIEW => p[2] & VIEW_WRITE == 0,
+        OPEN => p[2] & (O_CREATE | O_TRUNC) == 0,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_and_changes() {
+        let none = [0u64; 6];
+        for op in [
+            READ, READ_FILE, STAT, FSTAT, READDIR, STATFS, XATTR_GET, CLOSE,
+        ] {
+            assert!(reads_only(op, &none), "{op:#x}");
+        }
+        for op in [
+            WRITE, WRITE_FILE, TRUNCATE, MKDIR, UNLINK, RENAME, SETATTR, FSYNC, VIEW_SYNC,
+        ] {
+            assert!(!reads_only(op, &none), "{op:#x}");
+        }
+    }
+
+    #[test]
+    fn open_and_view_depend_on_flags() {
+        let with = |i: usize, v: u64| {
+            let mut p = [0u64; 6];
+            p[i] = v;
+            p
+        };
+        assert!(reads_only(OPEN, &with(2, O_READ)));
+        assert!(!reads_only(OPEN, &with(2, O_WRITE | O_CREATE)));
+        assert!(!reads_only(OPEN, &with(2, O_READ | O_TRUNC)));
+        // A read-only view reads; a writable one changes the file system.
+        assert!(reads_only(VIEW, &with(2, 0)));
+        assert!(!reads_only(VIEW, &with(2, VIEW_WRITE)));
+    }
+}
