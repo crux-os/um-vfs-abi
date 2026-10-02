@@ -308,6 +308,9 @@ pub const KIND_FILE: u8 = 1;
 pub const KIND_DIR: u8 = 2;
 pub const KIND_SYMLINK: u8 = 3;
 pub const KIND_FIFO: u8 = 4;
+/// A device file of the VFS itself (devfs): what is read and written is
+/// not stored, so no read-ahead at OPEN and no view are made of it.
+pub const KIND_CHAR: u8 = 5;
 
 /// Metadata of a file system object.
 #[repr(C)]
