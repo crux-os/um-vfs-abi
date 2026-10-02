@@ -487,7 +487,10 @@ mod tests {
         assert_eq!(plus_attrs(7, KIND_FILE, Some(st)), (st, 0));
         // Not found: no attributes, and not by `nlink` being 0.
         let (e, f) = plus_attrs(7, KIND_FILE, None);
-        assert_eq!((f, e.ino, e.kind, e.size), (DIRENT_NO_ATTRS, 7, KIND_FILE, 0));
+        assert_eq!(
+            (f, e.ino, e.kind, e.size),
+            (DIRENT_NO_ATTRS, 7, KIND_FILE, 0)
+        );
         // The name leads to another object now.
         let (e, f) = plus_attrs(8, KIND_FILE, Some(st));
         assert_eq!((f, e.ino, e.size), (DIRENT_NO_ATTRS, 8, 0));
