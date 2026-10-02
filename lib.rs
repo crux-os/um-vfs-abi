@@ -105,10 +105,13 @@ pub const READDIR: u32 = 0x20F;
 /// READDIR_PLUS(h, cookie): [`READDIR`] with each entry's attributes, as
 /// STAT without following a final symbolic link would give them: a
 /// record is the `Dirent` header, a [`Stat`], then the name, padded to
-/// 8 (`rec_len`, `DIRENT_PLUS_HEADER` before the name). A `Stat` with
-/// `nlink` 0 means the entry could not be looked at (gone since): ask
-/// STAT. One request for what `ls -l`, `find` and a build tool otherwise
-/// ask a request per entry. Same reply as READDIR.
+/// 8 (`rec_len`, `DIRENT_PLUS_HEADER` before the name). A record with
+/// `DIRENT_NO_ATTRS` in its `flags` has no attributes (the entry could not
+/// be looked at, or is another one by now): its `Stat` is empty but for
+/// `ino` and `kind`, ask STAT. One request for what `ls -l`, `find` and a
+/// build tool otherwise ask a request per entry. Same reply as READDIR. A
+/// name that does not fit the window at all is an error (ENAMETOOLONG),
+/// not an empty batch.
 pub const READDIR_PLUS: u32 = 0x21E;
 /// SETATTR(h, mask, flags<<32|mode, uid<<32|gid, atime_ns, mtime_ns).
 /// reply: [status]
@@ -400,10 +403,13 @@ pub struct Dirent {
     /// Cookie that resumes the listing after this entry.
     pub next: u64,
     pub kind: u8,
-    pub _pad: u8,
+    /// DIRENT_*.
+    pub flags: u8,
     pub name_len: u16,
     pub rec_len: u32,
 }
+/// `Dirent::flags`: a [`READDIR_PLUS`] record without attributes.
+pub const DIRENT_NO_ATTRS: u8 = 1 << 0;
 pub const DIRENT_HEADER: usize = core::mem::size_of::<Dirent>();
 /// Where the name of a [`READDIR_PLUS`] record starts.
 pub const DIRENT_PLUS_HEADER: usize = DIRENT_HEADER + core::mem::size_of::<Stat>();
@@ -424,6 +430,25 @@ pub struct TrashEntry {
     pub _pad2: u32,
 }
 pub const TRASH_HEADER: usize = core::mem::size_of::<TrashEntry>();
+
+/// The attributes of a [`READDIR_PLUS`] record for the entry `ino` of kind
+/// `kind`, from what a lookup by name gave (`None`: it failed): those, and
+/// the record's flags; with no attributes, or those of another object (the
+/// name leads elsewhere since the listing), an empty `Stat` and
+/// `DIRENT_NO_ATTRS`.
+pub fn plus_attrs(ino: u64, kind: u8, found: Option<Stat>) -> (Stat, u8) {
+    match found {
+        Some(st) if st.ino == ino => (st, 0),
+        _ => (
+            Stat {
+                ino,
+                kind,
+                ..Stat::default()
+            },
+            DIRENT_NO_ATTRS,
+        ),
+    }
+}
 
 /// Record length for a header of `header` bytes plus `n` bytes, 8-aligned.
 pub const fn rec_len(header: usize, n: usize) -> usize {
@@ -449,6 +474,28 @@ pub fn reads_only(op: u32, p: &[u64; 6]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn readdir_plus_attributes_or_the_flag() {
+        let st = Stat {
+            ino: 7,
+            kind: KIND_FILE,
+            nlink: 1,
+            size: 10,
+            ..Stat::default()
+        };
+        assert_eq!(plus_attrs(7, KIND_FILE, Some(st)), (st, 0));
+        // Not found: no attributes, and not by `nlink` being 0.
+        let (e, f) = plus_attrs(7, KIND_FILE, None);
+        assert_eq!((f, e.ino, e.kind, e.size), (DIRENT_NO_ATTRS, 7, KIND_FILE, 0));
+        // The name leads to another object now.
+        let (e, f) = plus_attrs(8, KIND_FILE, Some(st));
+        assert_eq!((f, e.ino, e.size), (DIRENT_NO_ATTRS, 8, 0));
+        // A file with no links left on the volume is not "no attributes".
+        let gone = Stat { nlink: 0, ..st };
+        assert_eq!(plus_attrs(7, KIND_FILE, Some(gone)), (gone, 0));
+        assert_eq!(DIRENT_HEADER, 24);
+    }
 
     #[test]
     fn reads_and_changes() {
