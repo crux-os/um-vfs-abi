@@ -133,6 +133,16 @@ pub const SYNC: u32 = 0x218;
 /// Otherwise h is open for reading the rest (READ from n, then CLOSE)
 /// and size is the file's size at open.
 pub const READ_FILE: u32 = 0x219;
+/// WRITE_FILE(dir, path_len, len, mode, flags): create the file (as OPEN
+/// with [`O_CREATE`] | [`O_TRUNC`] | [`O_WRITE`]; `flags` may add
+/// [`O_EXCL`]), write the `len` bytes at window[WRITE_FILE_DATA_AT..] as
+/// its whole contents and close it: what `fs::write` is, in one request
+/// instead of three. Path at window[0..path_len]; `len` at most the
+/// window less [`WRITE_FILE_DATA_AT`] (a bigger one is written the usual
+/// way). reply: [status, n]; n < len: the file system took no more.
+pub const WRITE_FILE: u32 = 0x21D;
+/// Where WRITE_FILE takes its data from (after the longest path).
+pub const WRITE_FILE_DATA_AT: usize = PATH_MAX;
 /// VIEW(h, reads, flags): a shared view of regular file `h` (opened
 /// for reading), for a client that reads it at scattered places
 /// (`reads`: how many so far; the server may want more before it copies
