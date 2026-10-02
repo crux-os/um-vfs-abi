@@ -102,6 +102,14 @@ pub const READLINK: u32 = 0x20E;
 /// READDIR(h, cookie): a batch of `Dirent` records filling the window.
 /// Cookie 0 = start. reply: [status, count, next cookie, eof]
 pub const READDIR: u32 = 0x20F;
+/// READDIR_PLUS(h, cookie): [`READDIR`] with each entry's attributes, as
+/// STAT without following a final symbolic link would give them: a
+/// record is the `Dirent` header, a [`Stat`], then the name, padded to
+/// 8 (`rec_len`, `DIRENT_PLUS_HEADER` before the name). A `Stat` with
+/// `nlink` 0 means the entry could not be looked at (gone since): ask
+/// STAT. One request for what `ls -l`, `find` and a build tool otherwise
+/// ask a request per entry. Same reply as READDIR.
+pub const READDIR_PLUS: u32 = 0x21E;
 /// SETATTR(h, mask, flags<<32|mode, uid<<32|gid, atime_ns, mtime_ns).
 /// reply: [status]
 pub const SETATTR: u32 = 0x210;
@@ -397,6 +405,8 @@ pub struct Dirent {
     pub rec_len: u32,
 }
 pub const DIRENT_HEADER: usize = core::mem::size_of::<Dirent>();
+/// Where the name of a [`READDIR_PLUS`] record starts.
+pub const DIRENT_PLUS_HEADER: usize = DIRENT_HEADER + core::mem::size_of::<Stat>();
 
 /// One trashed item in a TRASH_LIST batch: header, then the original
 /// path (`path_len` bytes), padded to 8 (`rec_len`).
@@ -428,8 +438,8 @@ pub const fn rec_len(header: usize, n: usize) -> usize {
 /// file system through the server, and making one may copy the file up.
 pub fn reads_only(op: u32, p: &[u64; 6]) -> bool {
     match op {
-        READ | READ_FILE | STAT | FSTAT | READLINK | READDIR | STATFS | TRASH_LIST | XATTR_GET
-        | XATTR_LIST | CLOSE => true,
+        READ | READ_FILE | STAT | FSTAT | READLINK | READDIR | READDIR_PLUS | STATFS
+        | TRASH_LIST | XATTR_GET | XATTR_LIST | CLOSE => true,
         VIEW => p[2] & VIEW_WRITE == 0,
         OPEN => p[2] & (O_CREATE | O_TRUNC) == 0,
         _ => false,
