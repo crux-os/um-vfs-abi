@@ -17,6 +17,11 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(missing_docs)]
 
+#[cfg(test)]
+extern crate std;
+
+pub mod acl;
+
 // ── status codes ────────────────────────────────────────────────────────
 //
 // Reply status (payload[0]) is a system status from the error registry
@@ -268,6 +273,25 @@ pub const MOUNT: u32 = 0x242;
 /// `UMOUNT` flags.
 pub const UMOUNT_FORCE: u64 = 1 << 0;
 
+/// ACL_GET(dir, path_len): the access list of the object at the path
+/// (following a final link): `AclEntry` records at window[0..], then
+/// nothing. reply: [status, count]. Whoever may see the object may read
+/// its list.
+pub const ACL_GET: u32 = 0x250;
+/// ACL_SET(dir, path_len, count): replace the access list of the object
+/// at the path with `count` entries (`acl::AclEntry`, valid per
+/// `acl::valid`) at window[path_len..]; none removes it. Needs the right
+/// to manage: the owner, an entry with `ACL_MANAGE`, or fs.admin. A
+/// directory's list is what new objects in it start with. Open handles
+/// lose the rights the new list does not give. Only on volumes that keep
+/// lists (CruxFS, tmpfs): ENOTSUP elsewhere. reply: [status]
+pub const ACL_SET: u32 = 0x251;
+/// ACCESS_EXPLAIN(dir, path_len, uid, gid, access=`O_*` bits): whether
+/// `uid`:`gid` may do `access` to the object at the path, and the rule:
+/// a sentence at window[0..n]. reply: [status, allowed (0/1), n].
+/// Asking about another user than oneself needs fs.admin.
+pub const ACCESS_EXPLAIN: u32 = 0x252;
+
 // ── flags ───────────────────────────────────────────────────────────
 // ── OPEN flags ──────────────────────────────────────────────────────
 // Access: every OPEN says what the handle is for -- at least one of
@@ -340,6 +364,8 @@ pub const SETATTR_FLAGS: u64 = 1 << 5;
 /// starting with '.', but set on the object (FAT/exFAT: the hidden
 /// attribute).
 pub const FLAG_HIDDEN: u8 = 1 << 0;
+/// The object has an access list (`ACL_GET`).
+pub const FLAG_ACL: u8 = 1 << 1;
 
 // ── object kinds ────────────────────────────────────────────────────
 pub const KIND_FILE: u8 = 1;
@@ -509,7 +535,7 @@ pub const fn rec_len(header: usize, n: usize) -> usize {
 pub fn reads_only(op: u32, p: &[u64; 6]) -> bool {
     match op {
         READ | READ_FILE | STAT | FSTAT | READLINK | READDIR | READDIR_PLUS | STATFS | MOUNTS
-        | TRASH_LIST | XATTR_GET | XATTR_LIST | CLOSE => true,
+        | ACL_GET | ACCESS_EXPLAIN | TRASH_LIST | XATTR_GET | XATTR_LIST | CLOSE => true,
         VIEW => p[2] & VIEW_WRITE == 0,
         OPEN => p[2] & (O_CREATE | O_TRUNC) == 0,
         _ => false,
