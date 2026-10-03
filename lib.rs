@@ -21,6 +21,7 @@
 extern crate std;
 
 pub mod acl;
+pub mod ring;
 
 // ── status codes ────────────────────────────────────────────────────────
 //
@@ -336,6 +337,24 @@ pub struct ReadRec {
 }
 pub const READ_REC_HEADER: usize = core::mem::size_of::<ReadRec>();
 
+/// RING_CREATE(sq_entries, cq_entries, features, data_off) with the
+/// handle of a shared-memory region in [`RING_REGION_SLOT`] (the program's:
+/// see [`ring`]): the session's request ring. One per session (EBUSY).
+/// `sq_entries` and `cq_entries` are powers of two up to
+/// [`ring::ENTRIES_MAX`]; `data_off` (page aligned, from [`ring::layout`])
+/// where the data area starts, at most the region's size. The server
+/// writes the header. reply: [status, features accepted, version].
+pub const RING_CREATE: u32 = 0x270;
+/// Where RING_CREATE carries the region's handle.
+pub const RING_REGION_SLOT: usize = 5;
+/// RING_ENTER(): run the requests submitted since the last one (the SQ from
+/// `sq_head` to `sq_tail`), in order, chains as chains, and post their
+/// completions; stops early if the CQ has no room (reap, enter again).
+/// reply: [status, requests completed]. A broken counter ends the ring
+/// (EINVAL) -- the ring's error, not the session's.
+pub const RING_ENTER: u32 = 0x271;
+/// RING_DESTROY(): the ring is let go (the region is the program's).
+pub const RING_DESTROY: u32 = 0x272;
 /// ACL_GET(dir, path_len): the access list of the object at the path
 /// (following a final link): `AclEntry` records at window[0..], then
 /// nothing. reply: [status, count]. Whoever may see the object may read
