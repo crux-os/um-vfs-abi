@@ -273,6 +273,45 @@ pub const MOUNT: u32 = 0x242;
 /// `UMOUNT` flags.
 pub const UMOUNT_FORCE: u64 = 1 << 0;
 
+/// STAT_MANY(dir, count, _, flags=AT_NOFOLLOW?): the attributes of `count`
+/// paths in one request, for `find`, `du`, a build tool that looks at
+/// every file of a list. Window: `count` u32 lengths, then the paths back
+/// to back. reply: [status, count]; `count` [`StatRec`] at window[0..], in
+/// the order asked, each with its own status (a missing name is ENOENT
+/// there, not a failed request). At most [`BATCH_MAX`] paths.
+pub const STAT_MANY: u32 = 0x260;
+/// READ_MANY(dir, count, max_each): the first `max_each` bytes of `count`
+/// files in one request (open, read, close of each): the small files of a
+/// list. Window as [`STAT_MANY`]. reply: [status, done]: for the first
+/// `done` paths (the window may fill first: ask again for the rest) a
+/// [`ReadRec`] and its `len` bytes, the next record 8-aligned. A file
+/// longer than what came has `size` more than `len`.
+pub const READ_MANY: u32 = 0x261;
+/// Most paths of one STAT_MANY / READ_MANY.
+pub const BATCH_MAX: usize = 4096;
+
+/// A STAT_MANY reply record: the path's status (0 or a negative
+/// `facility:code`), and its attributes (empty when the status is not 0).
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default)]
+pub struct StatRec {
+    pub status: i64,
+    pub stat: Stat,
+}
+
+/// A READ_MANY reply record, followed by `len` bytes (padded to 8).
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default)]
+pub struct ReadRec {
+    pub status: i64,
+    /// The file's size.
+    pub size: u64,
+    /// Bytes of data after this record.
+    pub len: u32,
+    pub _pad: u32,
+}
+pub const READ_REC_HEADER: usize = core::mem::size_of::<ReadRec>();
+
 /// ACL_GET(dir, path_len): the access list of the object at the path
 /// (following a final link): `AclEntry` records at window[0..], then
 /// nothing. reply: [status, count]. Whoever may see the object may read
@@ -545,6 +584,14 @@ pub fn reads_only(op: u32, p: &[u64; 6]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batch_records() {
+        assert_eq!(READ_REC_HEADER % 8, 0);
+        assert_eq!(core::mem::size_of::<StatRec>() % 8, 0);
+        assert!(reads_only(STAT_MANY, &[0; 6]) && reads_only(READ_MANY, &[0; 6]));
+        assert!(BATCH_MAX * 4 < WINDOW_MIN);
+    }
 
     #[test]
     fn mount_records_are_aligned() {
