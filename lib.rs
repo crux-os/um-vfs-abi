@@ -176,6 +176,12 @@ pub const WRITE_FILE_DATA_AT: usize = PATH_MAX;
 /// is left behind (unmap it; READ, or a new VIEW, from then on).
 /// EAGAIN: not yet worth it (ask again after more reads); EFBIG,
 /// ENOMEM: not for this file now.
+/// A read-only view is paged (SHM_PAGED) where the kernel has it: the
+/// header is there at once, a data page is read from the file when first
+/// touched (the toucher waits for it), so any file up to a gigabyte is
+/// given at once, whatever `reads` says. A page the file system cannot
+/// read, and a page not read yet when the view is left behind, end the
+/// toucher with SIGBUS: look at the dead word before touching.
 pub const VIEW: u32 = 0x21A;
 /// Reply slot of VIEW with the view's handle.
 pub const VIEW_SLOT: usize = 3;
