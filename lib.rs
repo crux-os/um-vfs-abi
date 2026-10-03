@@ -574,7 +574,8 @@ pub const fn rec_len(header: usize, n: usize) -> usize {
 pub fn reads_only(op: u32, p: &[u64; 6]) -> bool {
     match op {
         READ | READ_FILE | STAT | FSTAT | READLINK | READDIR | READDIR_PLUS | STATFS | MOUNTS
-        | ACL_GET | ACCESS_EXPLAIN | TRASH_LIST | XATTR_GET | XATTR_LIST | CLOSE => true,
+        | ACL_GET | ACCESS_EXPLAIN | TRASH_LIST | XATTR_GET | XATTR_LIST | CLOSE | STAT_MANY
+        | READ_MANY => true,
         VIEW => p[2] & VIEW_WRITE == 0,
         OPEN => p[2] & (O_CREATE | O_TRUNC) == 0,
         _ => false,
