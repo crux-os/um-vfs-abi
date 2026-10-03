@@ -272,6 +272,24 @@ pub const UMOUNT: u32 = 0x241;
 pub const MOUNT: u32 = 0x242;
 /// `UMOUNT` flags.
 pub const UMOUNT_FORCE: u64 = 1 << 0;
+/// BIND(src_len, dst_len): make the directory at `src` also appear at
+/// `dst` (a bind mount): `dst` is a directory that exists (its contents are
+/// hidden while bound) or a name that does not yet (it appears in its
+/// parent's listing). Paths in the window, `src` first. What is written
+/// through one path is there under the other: they are one directory.
+/// `..` of the bound directory leads back to where it is bound. For the
+/// system and administrators. Not onto a path inside `src` (EINVAL); a name
+/// taken by a file is ENOTDIR, by another mount EBUSY. A bind goes when
+/// the file system of `src` or of `dst`'s parent goes (an unplugged disk).
+/// reply: [status]
+pub const BIND: u32 = 0x243;
+/// UNBIND(dst_len): take a bind mount away (not a volume: UMOUNT; EINVAL
+/// for anything else). Whoever may BIND. reply: [status]
+pub const UNBIND: u32 = 0x244;
+/// `MountRec::flags`: a bind mount (its `StatFs` is of the volume it is
+/// in); a volume mounted read-only by the policy of /config/mounts.
+pub const MOUNT_BIND: u8 = 1 << 0;
+pub const MOUNT_FORCED_RO: u8 = 1 << 1;
 
 /// STAT_MANY(dir, count, _, flags=AT_NOFOLLOW?): the attributes of `count`
 /// paths in one request, for `find`, `du`, a build tool that looks at
@@ -518,7 +536,9 @@ pub struct MountRec {
     pub fs_len: u16,
     pub label_len: u16,
     pub path_len: u16,
-    pub _pad: [u8; 6],
+    /// MOUNT_*.
+    pub flags: u8,
+    pub _pad: [u8; 5],
 }
 /// Where the strings of a [`MountRec`] start.
 pub const MOUNT_REC_HEADER: usize =
