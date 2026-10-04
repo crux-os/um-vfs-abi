@@ -662,7 +662,10 @@ mod tests {
         // attributes, only what the listing knew (ino, kind), flagged.
         let (other, flags) = plus_attrs(8, KIND_FILE, Some(st));
         assert_eq!(flags, DIRENT_NO_ATTRS);
-        assert_eq!((other.ino, other.kind, other.nlink, other.size), (8, KIND_FILE, 0, 0));
+        assert_eq!(
+            (other.ino, other.kind, other.nlink, other.size),
+            (8, KIND_FILE, 0, 0)
+        );
         // Gone, or not to be looked at: the same, flagged (never nlink 0
         // without the flag).
         let (gone, flags) = plus_attrs(7, KIND_DIR, None);
@@ -674,8 +677,14 @@ mod tests {
     fn write_file_data_must_fit_before_anything_is_opened() {
         let window = WINDOW_MIN;
         assert!(write_file_fits(window, 0));
-        assert!(write_file_fits(window, (window - WRITE_FILE_DATA_AT) as u64));
-        assert!(!write_file_fits(window, (window - WRITE_FILE_DATA_AT) as u64 + 1));
+        assert!(write_file_fits(
+            window,
+            (window - WRITE_FILE_DATA_AT) as u64
+        ));
+        assert!(!write_file_fits(
+            window,
+            (window - WRITE_FILE_DATA_AT) as u64 + 1
+        ));
         assert!(!write_file_fits(window, u64::MAX));
         // A window shorter than the path area holds no data at all.
         assert!(!write_file_fits(WRITE_FILE_DATA_AT - 1, 0));
