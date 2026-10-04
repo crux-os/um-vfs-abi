@@ -40,6 +40,10 @@ pub const H_CQ_TAIL: usize = 320;
 /// u32: bits of who sleeps (`WAIT_*`), for futex waiters.
 pub const H_WAIT: usize = 384;
 
+/// A program that waits for completions sets `WAIT_PROGRAM` in the word at
+/// [`H_WAIT`], looks at the CQ tail again, and sleeps on the low 32 bits
+/// of [`H_CQ_TAIL`] (futex on shared memory); the server, after it posts
+/// completions, clears the bit and wakes the sleepers if it was set.
 pub const WAIT_SERVER: u32 = 1;
 pub const WAIT_PROGRAM: u32 = 2;
 
@@ -75,7 +79,7 @@ pub struct Sqe {
     pub len: u32,
     /// The operation's fifth argument (`OPEN`: bytes to read ahead).
     pub buf: u32,
-    /// Reserved (`SQE_DEADLINE`).
+    /// With [`SQE_DEADLINE`]: when the request must have started by.
     pub deadline: u64,
     /// The operation's second to fourth arguments.
     pub aux: [u64; 3],
@@ -93,6 +97,12 @@ pub const SQE_DRAIN: u16 = 1 << 1;
 /// the chain name it as [`H_PREV`], and it is closed when the chain ends,
 /// done or cut short. The completion's `res` is 0.
 pub const SQE_FIXED: u16 = 1 << 2;
+
+/// `Sqe::deadline` is an absolute time (nanoseconds of the monotonic
+/// clock, `runtime::time::Instant`): a request the server has not started
+/// by then completes with `ETIMEDOUT` (and cuts its chain short). A
+/// request that runs is not interrupted.
+pub const SQE_DEADLINE: u16 = 1 << 3;
 
 /// [`Sqe::handle`]: the root directory (what the protocol's `ROOT` is).
 pub const H_ROOT: u32 = u32::MAX;
