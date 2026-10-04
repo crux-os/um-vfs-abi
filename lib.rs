@@ -605,6 +605,14 @@ pub fn plus_attrs(ino: u64, kind: u8, found: Option<Stat>) -> (Stat, u8) {
     }
 }
 
+/// Whether `len` bytes of data fit a window of `window` bytes behind the
+/// path area of a [`WRITE_FILE`] request. Checked before the file is
+/// opened (an open that truncates must not be followed by a request that
+/// cannot be served).
+pub fn write_file_fits(window: usize, len: u64) -> bool {
+    window >= WRITE_FILE_DATA_AT && len <= (window - WRITE_FILE_DATA_AT) as u64
+}
+
 /// Record length for a header of `header` bytes plus `n` bytes, 8-aligned.
 pub const fn rec_len(header: usize, n: usize) -> usize {
     (header + n + 7) & !7
@@ -637,6 +645,40 @@ mod tests {
         assert_eq!(core::mem::size_of::<StatRec>() % 8, 0);
         assert!(reads_only(STAT_MANY, &[0; 6]) && reads_only(READ_MANY, &[0; 6]));
         assert!(BATCH_MAX * 4 < WINDOW_MIN);
+    }
+
+    #[test]
+    fn plus_records_never_carry_the_attributes_of_another_object() {
+        let st = Stat {
+            ino: 7,
+            nlink: 2,
+            size: 99,
+            kind: KIND_FILE,
+            ..Stat::default()
+        };
+        // The entry as it stood: its own attributes.
+        assert_eq!(plus_attrs(7, KIND_FILE, Some(st)), (st, 0));
+        // Another object by the name now (renamed over, replaced): no
+        // attributes, only what the listing knew (ino, kind), flagged.
+        let (other, flags) = plus_attrs(8, KIND_FILE, Some(st));
+        assert_eq!(flags, DIRENT_NO_ATTRS);
+        assert_eq!((other.ino, other.kind, other.nlink, other.size), (8, KIND_FILE, 0, 0));
+        // Gone, or not to be looked at: the same, flagged (never nlink 0
+        // without the flag).
+        let (gone, flags) = plus_attrs(7, KIND_DIR, None);
+        assert_eq!(flags, DIRENT_NO_ATTRS);
+        assert_eq!((gone.ino, gone.kind), (7, KIND_DIR));
+    }
+
+    #[test]
+    fn write_file_data_must_fit_before_anything_is_opened() {
+        let window = WINDOW_MIN;
+        assert!(write_file_fits(window, 0));
+        assert!(write_file_fits(window, (window - WRITE_FILE_DATA_AT) as u64));
+        assert!(!write_file_fits(window, (window - WRITE_FILE_DATA_AT) as u64 + 1));
+        assert!(!write_file_fits(window, u64::MAX));
+        // A window shorter than the path area holds no data at all.
+        assert!(!write_file_fits(WRITE_FILE_DATA_AT - 1, 0));
     }
 
     #[test]
