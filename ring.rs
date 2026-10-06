@@ -40,14 +40,17 @@ pub const H_CQ_TAIL: usize = 320;
 /// u32: bits of who sleeps (`WAIT_*`), for futex waiters.
 pub const H_WAIT: usize = 384;
 
-/// A program that waits for completions reads the low 32 bits of
-/// [`H_CQ_TAIL`], then sets `WAIT_PROGRAM` in the word at [`H_WAIT`], looks at
-/// the CQ again, and sleeps on that word of the tail with the value it read
-/// (futex on shared memory); the server, after it posts completions,
-/// clears the bit and wakes the sleepers if it was set. The order matters:
-/// with the bit set before the tail is read, a `notify` between the two
-/// clears the bit while the value read already holds its completion, and
-/// the next completion wakes nobody.
+/// A program that waits for completions sets `WAIT_PROGRAM` in the word at
+/// [`H_WAIT`], reads the low 32 bits of [`H_CQ_TAIL`], looks at the CQ, and
+/// sleeps on that word of the tail with the value it read (futex on shared
+/// memory); it takes the bit away when the wait ends, whichever way. The
+/// server, after it posts a completion, fences, and wakes the sleepers on
+/// the tail if the bit is set: it never clears it. (A server that cleared
+/// it lost wake-ups: a `notify` that ran after the program had set the bit
+/// and read a tail already holding that notify's completion took the bit
+/// meant for the next completion, which then woke nobody; likewise with the
+/// bit set after the tail is read.) A wait for two completions posted a few
+/// microseconds apart is what meets the window.
 pub const WAIT_SERVER: u32 = 1;
 pub const WAIT_PROGRAM: u32 = 2;
 

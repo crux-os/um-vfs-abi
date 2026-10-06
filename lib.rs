@@ -180,9 +180,14 @@ pub const WRITE_FILE_DATA_AT: usize = PATH_MAX;
 /// A read-only view is paged (SHM_PAGED) where the kernel has it: the
 /// header is there at once, a data page is read from the file when first
 /// touched (the toucher waits for it), so any file up to a gigabyte is
-/// given at once, whatever `reads` says. A page the file system cannot
-/// read, and a page not read yet when the view is left behind, end the
-/// toucher with SIGBUS: look at the dead word before touching.
+/// given at once, whatever `reads` says. Leaving the view behind (the dead
+/// word) does not end the mapping: a permission change, a growth of the
+/// file beyond the room of the view, a writable view of the file made --
+/// the pages not read yet are read from the file when touched as before,
+/// as long as a handle of the file is open. A page the file system cannot
+/// read, a page wholly past the file's end (a truncation) and, when the
+/// file's last handle closes, a page not read yet end the toucher with
+/// SIGBUS: keep the file open while its view is mapped.
 pub const VIEW: u32 = 0x21A;
 /// Reply slot of VIEW with the view's handle.
 pub const VIEW_SLOT: usize = 3;
