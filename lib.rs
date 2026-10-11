@@ -317,6 +317,14 @@ pub const STAT_MANY: u32 = 0x260;
 /// [`ReadRec`] and its `len` bytes, the next record 8-aligned. A file
 /// longer than what came has `size` more than `len`.
 pub const READ_MANY: u32 = 0x261;
+/// READ_INTO(h, offset, len): READ for a client that sent the request with
+/// `Channel::call_into`: the bytes go straight to its buffer (from `offset`
+/// on, `len` <= the buffer; the window is not used), the server copying
+/// them out of its cache with `copy_out`. reply: [status, n]; n < len only
+/// at the end of the file. Without a buffer offered the request fails
+/// (EINVAL); a server that does not know it answers EINVAL or ENOSYS: the
+/// client reads with [`READ`].
+pub const READ_INTO: u32 = 0x262;
 /// Most paths of one STAT_MANY / READ_MANY.
 pub const BATCH_MAX: usize = 4096;
 
@@ -633,7 +641,7 @@ pub fn reads_only(op: u32, p: &[u64; 6]) -> bool {
     match op {
         READ | READ_FILE | STAT | FSTAT | READLINK | READDIR | READDIR_PLUS | STATFS | MOUNTS
         | ACL_GET | ACCESS_EXPLAIN | TRASH_LIST | XATTR_GET | XATTR_LIST | CLOSE | STAT_MANY
-        | READ_MANY => true,
+        | READ_MANY | READ_INTO => true,
         VIEW => p[2] & VIEW_WRITE == 0,
         OPEN => p[2] & (O_CREATE | O_TRUNC) == 0,
         _ => false,
@@ -649,6 +657,7 @@ mod tests {
         assert_eq!(READ_REC_HEADER % 8, 0);
         assert_eq!(core::mem::size_of::<StatRec>() % 8, 0);
         assert!(reads_only(STAT_MANY, &[0; 6]) && reads_only(READ_MANY, &[0; 6]));
+        assert!(reads_only(READ_INTO, &[0; 6]));
         assert!(BATCH_MAX * 4 < WINDOW_MIN);
     }
 
